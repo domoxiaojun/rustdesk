@@ -1370,7 +1370,7 @@ jobs:
           - {
               arch: x86_64,
               target: x86_64-unknown-linux-gnu,
-              distro: ubuntu18.04,
+              distro: ubuntu20.04,
               on: ubuntu-20.04,
               deb_arch: amd64,
               vcpkg-triplet: x64-linux,
@@ -1378,7 +1378,7 @@ jobs:
           - {
               arch: aarch64,
               target: aarch64-unknown-linux-gnu,
-              distro: ubuntu18.04,
+              distro: ubuntu20.04,
               on: [self-hosted, Linux, ARM64],
               deb_arch: arm64,
               vcpkg-triplet: arm64-linux,
