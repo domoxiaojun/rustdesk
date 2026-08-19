@@ -16,8 +16,7 @@ on:
     - cron: "17 3 * * *"
 
 permissions:
-  actions: write
-  contents: write
+  contents: read
 
 concurrency:
   group: sync-upstream-master
@@ -30,12 +29,30 @@ jobs:
     outputs:
       changed: ${{ steps.sync.outputs.changed }}
     steps:
+      - name: Verify sync token
+        env:
+          SYNC_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
+        run: |
+          if [[ -z "$SYNC_TOKEN" ]]; then
+            echo "::error::Repository secret UPSTREAM_SYNC_TOKEN is required for upstream pushes."
+            exit 1
+          fi
+
       - name: Checkout fork master
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
           ref: master
           submodules: false
+          token: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
+          persist-credentials: false
+
+      - name: Configure temporary Git credentials
+        env:
+          SYNC_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
+        run: |
+          auth_header="$(printf 'x-access-token:%s' "$SYNC_TOKEN" | base64 -w0)"
+          git config --local http.https://github.com/.extraheader "AUTHORIZATION: basic $auth_header"
 
       - name: Configure Git identity
         run: |
@@ -51,12 +68,16 @@ jobs:
         run: git push origin HEAD:master
 
       - name: Record sync result
+        env:
+          SYNC_CHANGED: ${{ steps.sync.outputs.changed }}
+          SYNC_HEAD: ${{ steps.sync.outputs.head }}
+          SYNC_HBB: ${{ steps.sync.outputs.hbb }}
         run: |
           {
             echo "### RustDesk upstream sync"
-            echo "- Changed: ${{ steps.sync.outputs.changed }}"
-            echo "- HEAD: \`${{ steps.sync.outputs.head }}\`"
-            echo "- hbb_common: \`${{ steps.sync.outputs.hbb }}\`"
+            echo "- Changed: $SYNC_CHANGED"
+            echo "- HEAD: \`$SYNC_HEAD\`"
+            echo "- hbb_common: \`$SYNC_HBB\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   release:
@@ -67,11 +88,29 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Verify sync token
+        env:
+          SYNC_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
+        run: |
+          if [[ -z "$SYNC_TOKEN" ]]; then
+            echo "::error::Repository secret UPSTREAM_SYNC_TOKEN is required for release tags and workflow dispatch."
+            exit 1
+          fi
+
       - name: Checkout synchronized master
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
           ref: master
+          token: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
+          persist-credentials: false
+
+      - name: Configure temporary Git credentials
+        env:
+          SYNC_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
+        run: |
+          auth_header="$(printf 'x-access-token:%s' "$SYNC_TOKEN" | base64 -w0)"
+          git config --local http.https://github.com/.extraheader "AUTHORIZATION: basic $auth_header"
 
       - name: Create release tag
         id: tag
@@ -83,18 +122,27 @@ jobs:
       - name: Dispatch release builds
         if: steps.tag.outputs.dispatch == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
           RELEASE_TAG: ${{ steps.tag.outputs.tag }}
         run: |
           gh workflow run flutter-tag.yml --repo "$GITHUB_REPOSITORY" --ref "$RELEASE_TAG"
           gh workflow run fdroid.yml --repo "$GITHUB_REPOSITORY" --ref "$RELEASE_TAG"
 
       - name: Record release result
+        env:
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
+          RELEASE_CREATED: ${{ steps.tag.outputs.created }}
+          RELEASE_REASON: ${{ steps.tag.outputs.reason }}
+          RELEASE_DISPATCH: ${{ steps.tag.outputs.dispatch }}
         run: |
           {
             echo "### Release dispatch"
-            echo "- Tag: \`${{ steps.tag.outputs.tag }}\`"
-            echo "- Tag created: ${{ steps.tag.outputs.created }}"
-            echo "- Reason: ${{ steps.tag.outputs.reason }}"
-            echo "- Workflows dispatched: ${{ steps.tag.outputs.dispatch }}"
+            echo "- Tag: \`$RELEASE_TAG\`"
+            echo "- Tag created: $RELEASE_CREATED"
+            echo "- Reason: $RELEASE_REASON"
+            echo "- Workflows dispatched: $RELEASE_DISPATCH"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove temporary Git credentials
+        if: always()
+        run: git config --local --unset-all http.https://github.com/.extraheader || true
