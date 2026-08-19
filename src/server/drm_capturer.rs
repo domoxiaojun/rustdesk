@@ -1642,6 +1642,7 @@ mod drm_capturer_tests {
             height: h,
             logical_size: Some((w, h)),
             refresh_rate: 60,
+            transform: 0,
         }
     }
 
