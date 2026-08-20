@@ -119,8 +119,10 @@ jobs:
           REQUESTED_TAG: ${{ inputs.release_tag }}
         run: bash .github/scripts/prepare-release.sh
 
-      - name: Dispatch release builds
-        if: steps.tag.outputs.dispatch == 'true'
+      - name: Dispatch release builds for an existing tag
+        if: >-
+          steps.tag.outputs.dispatch == 'true' &&
+          steps.tag.outputs.created != 'true'
         env:
           GH_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
           RELEASE_TAG: ${{ steps.tag.outputs.tag }}
@@ -133,14 +135,14 @@ jobs:
           RELEASE_TAG: ${{ steps.tag.outputs.tag }}
           RELEASE_CREATED: ${{ steps.tag.outputs.created }}
           RELEASE_REASON: ${{ steps.tag.outputs.reason }}
-          RELEASE_DISPATCH: ${{ steps.tag.outputs.dispatch }}
+          RELEASE_REQUESTED: ${{ steps.tag.outputs.dispatch }}
         run: |
           {
             echo "### Release dispatch"
             echo "- Tag: \`$RELEASE_TAG\`"
             echo "- Tag created: $RELEASE_CREATED"
             echo "- Reason: $RELEASE_REASON"
-            echo "- Workflows dispatched: $RELEASE_DISPATCH"
+            echo "- Build requested: $RELEASE_REQUESTED"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Remove temporary Git credentials

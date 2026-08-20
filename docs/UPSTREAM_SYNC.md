@@ -28,7 +28,7 @@ gh secret set UPSTREAM_SYNC_TOKEN --repo domoxiaojun/rustdesk
 4. 需要在同一官方版本内强制重建时开启该选项。标签留空时自动使用递增修订标签，例如 `v1.4.9-1`、`v1.4.9-2`。
 5. 也可以明确填写合法标签。自动化不会移动或覆盖已有标签。
 
-发布步骤会显式派发 `Flutter Tag Build` 和 F-Droid 工作流。同步推送、标签创建和工作流派发都使用 `UPSTREAM_SYNC_TOKEN`，避免默认 `GITHUB_TOKEN` 因缺少 Workflows 权限而被 GitHub 拒绝。
+新标签由 `UPSTREAM_SYNC_TOKEN` 推送后，标签 push 事件会自动触发 `Flutter Tag Build` 和 F-Droid 工作流。只有复用已存在且指向当前提交的标签重建时，才使用 `UPSTREAM_SYNC_TOKEN` 显式派发，避免新标签产生重复构建。
 
 ## 安全门禁
 
