@@ -1753,6 +1753,18 @@ pub struct LoginConfigHandler {
     pub remember: bool,
     config: PeerConfig,
     pub port_forward: (String, i32),
+    /// This login's `multiplex`, filled with `port_forward` under the turn
+    /// lock. `port_forward_mux` says whether a mapping probes for the tunnel;
+    /// one the probe latched to the raw pipe logs in without asking, so an
+    /// upgraded peer keeps giving it the raw pipe.
+    pub(crate) port_forward_multiplex: bool,
+    /// Set once per window, before its mappings start: every accept's claim
+    /// reads it.
+    pub(crate) port_forward_mux: bool,
+    /// Held by a port-forward mapping from filling `port_forward` and `hash`
+    /// until its login is built from them; a window's mappings log in
+    /// concurrently.
+    pub(crate) port_forward_login_turn: Arc<hbb_common::tokio::sync::Mutex<()>>,
     pub version: i64,
     features: Option<Features>,
     pub session_id: u64, // used for local <-> server communication
@@ -1792,6 +1804,10 @@ impl Deref for LoginConfigHandler {
 }
 
 impl LoginConfigHandler {
+    pub(crate) fn set_hash(&mut self, hash: Hash) {
+        self.hash = hash;
+    }
+
     /// Initialize the login config handler.
     ///
     /// # Arguments
@@ -2761,6 +2777,7 @@ impl LoginConfigHandler {
             ConnType::PORT_FORWARD | ConnType::RDP => lr.set_port_forward(PortForward {
                 host: self.port_forward.0.clone(),
                 port: self.port_forward.1,
+                multiplex: self.port_forward_multiplex,
                 ..Default::default()
             }),
             ConnType::TERMINAL => {
@@ -4055,6 +4072,26 @@ mod retry_tests {
             "Incoming only mode",
             false,
         ));
+    }
+}
+
+#[cfg(test)]
+mod port_forward_mux_tests {
+    use super::*;
+
+    #[test]
+    fn a_login_asks_for_the_tunnel_when_its_mapping_probes() {
+        let mut lc = LoginConfigHandler::default();
+        lc.conn_type = ConnType::PORT_FORWARD;
+        let asks = |lc: &LoginConfigHandler| {
+            lc.create_login_msg(String::new(), String::new(), vec![])
+                .login_request()
+                .port_forward()
+                .multiplex
+        };
+        assert!(!asks(&lc));
+        lc.port_forward_multiplex = true;
+        assert!(asks(&lc));
     }
 }
 
